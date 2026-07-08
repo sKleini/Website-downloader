@@ -80,18 +80,14 @@ jobs:
           echo "Download abgeschlossen. Inhalt:"
           du -sh "${{ steps.prep.outputs.host }}"
 
-      - name: In ZIP packen
-        run: |
-          set -euo pipefail
-          cd download
-          zip -r -q "../${{ steps.prep.outputs.host }}.zip" "${{ steps.prep.outputs.host }}"
-          echo "ZIP erstellt:"
-          ls -lh "../${{ steps.prep.outputs.host }}.zip"
-
-      - name: ZIP als Artifact hochladen
+      # Kein eigener zip-Schritt: actions/upload-artifact packt die
+      # hochgeladenen Dateien selbst in genau ein ZIP. Wir laden daher
+      # direkt den heruntergeladenen Ordner hoch, sonst entstünde ein
+      # ZIP im ZIP.
+      - name: Als Artifact hochladen
         uses: actions/upload-artifact@v7
         with:
           name: website-${{ steps.prep.outputs.host }}
-          path: ${{ steps.prep.outputs.host }}.zip
+          path: download/${{ steps.prep.outputs.host }}
           if-no-files-found: error
           retention-days: 30
