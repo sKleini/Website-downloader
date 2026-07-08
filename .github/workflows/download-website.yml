@@ -1,5 +1,8 @@
 name: Download Website
 
+# Zeigt die eingegebene URL im Titel des Action-Runs an.
+run-name: "Download Website: ${{ inputs.url }}"
+
 # Manuell auslösbare Action: URL eingeben -> Webseite wird gespiegelt,
 # als ZIP gepackt und an den Workflow-Run als Artifact angehängt.
 on:
