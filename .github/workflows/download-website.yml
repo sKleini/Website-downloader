@@ -12,6 +12,11 @@ on:
         description: "URL der Webseite, die heruntergeladen werden soll (z.B. https://example.org)"
         required: true
         type: string
+      depth:
+        description: "Maximale Linktiefe ab der Start-URL. 0 = ganze Seite (unbegrenzt), 1 = nur die Startseite, 2 = plus direkt verlinkte Seiten, usw."
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: read
@@ -46,9 +51,17 @@ jobs:
             exit 1
           fi
 
+          # Ebenentiefe prüfen (nur ganze Zahlen >= 0)
+          DEPTH="${{ github.event.inputs.depth }}"
+          if [[ ! "$DEPTH" =~ ^[0-9]+$ ]]; then
+            echo "::error::Ungültige Ebenentiefe: '$DEPTH' (nur ganze Zahlen >= 0 erlaubt)"
+            exit 1
+          fi
+
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "host=$HOST" >> "$GITHUB_OUTPUT"
-          echo "Lade herunter: $URL (Ordner: $HOST)"
+          echo "depth=$DEPTH" >> "$GITHUB_OUTPUT"
+          echo "Lade herunter: $URL (Ordner: $HOST, Ebenentiefe: $DEPTH)"
 
       - name: Webseite mit wget spiegeln
         run: |
@@ -62,9 +75,19 @@ jobs:
           # Seiten, die den Standard-wget-Agent mit 403 blocken, den
           # Download zulassen. (Hilft nicht gegen echten Bot-Schutz wie
           # Cloudflare-Challenges oder JS-Paywalls.)
+          #
+          # Ebenentiefe: 0 = ganze Seite (--mirror setzt unbegrenzte Tiefe).
+          # Bei einem Wert > 0 begrenzt --level die Rekursionstiefe; die für
+          # die Darstellung nötigen Seiten-Requisiten (CSS/Bilder) werden
+          # dank -p trotzdem geladen.
+          LEVEL_FLAG=""
+          if [[ "${{ steps.prep.outputs.depth }}" != "0" ]]; then
+            LEVEL_FLAG="--level=${{ steps.prep.outputs.depth }}"
+          fi
           wget -mkEpnp --no-if-modified-since \
             -e robots=off \
             --tries=3 \
+            $LEVEL_FLAG \
             --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" \
             --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
             --header="Accept-Language: de-DE,de;q=0.9,en;q=0.8" \
