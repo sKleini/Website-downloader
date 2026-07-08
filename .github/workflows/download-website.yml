@@ -103,6 +103,27 @@ jobs:
           echo "Download abgeschlossen. Inhalt:"
           du -sh "${{ steps.prep.outputs.host }}"
 
+      - name: Ungültige Dateinamen bereinigen
+        run: |
+          set -euo pipefail
+          cd download
+          # actions/upload-artifact verbietet die Zeichen " : < > | * ? \r \n
+          # in Dateinamen. wget legt z.B. bei Query-Strings Dateien wie
+          # 'index.html?C=D;O=A.html' an. Wir ersetzen diese Zeichen im
+          # Datei-/Ordnernamen durch '_' (Inhalt bleibt erhalten). Die
+          # Verarbeitung erfolgt von unten nach oben (-depth), damit das
+          # Umbenennen von Ordnern die noch offenen Pfade nicht bricht.
+          renamed=0
+          while IFS= read -r -d '' p; do
+            base="$(basename "$p")"
+            clean="$(printf '%s' "$base" | tr '":<>|*?\r\n' '_________')"
+            if [[ "$clean" != "$base" ]]; then
+              mv -f -- "$p" "$(dirname "$p")/$clean"
+              renamed=$((renamed + 1))
+            fi
+          done < <(find "${{ steps.prep.outputs.host }}" -depth -print0)
+          echo "Bereinigte Einträge: $renamed"
+
       # Kein eigener zip-Schritt: actions/upload-artifact packt die
       # hochgeladenen Dateien selbst in genau ein ZIP. Wir laden daher
       # direkt den heruntergeladenen Ordner hoch, sonst entstünde ein
