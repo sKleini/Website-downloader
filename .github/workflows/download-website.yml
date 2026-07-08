@@ -58,9 +58,16 @@ jobs:
           # Gleiche Flags wie in der Website-Downloader App:
           # -m (--mirror) -k (--convert-links) -E (--adjust-extension)
           # -p (--page-requisites) -np (--no-parent)
+          # Zusätzlich ein browser-ähnlicher User-Agent + Header, damit
+          # Seiten, die den Standard-wget-Agent mit 403 blocken, den
+          # Download zulassen. (Hilft nicht gegen echten Bot-Schutz wie
+          # Cloudflare-Challenges oder JS-Paywalls.)
           wget -mkEpnp --no-if-modified-since \
             -e robots=off \
             --tries=3 \
+            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" \
+            --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
+            --header="Accept-Language: de-DE,de;q=0.9,en;q=0.8" \
             "${{ steps.prep.outputs.url }}" || WGET_EXIT=$?
 
           # wget liefert bei einzelnen fehlgeschlagenen Requests einen
