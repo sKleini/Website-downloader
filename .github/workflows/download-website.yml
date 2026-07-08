@@ -1,0 +1,87 @@
+name: Download Website
+
+# Manuell auslösbare Action: URL eingeben -> Webseite wird gespiegelt,
+# als ZIP gepackt und an den Workflow-Run als Artifact angehängt.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL der Webseite, die heruntergeladen werden soll (z.B. https://example.org)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: URL prüfen und Zielordner bestimmen
+        id: prep
+        run: |
+          set -euo pipefail
+          URL="${{ github.event.inputs.url }}"
+
+          # http/https voranstellen, falls kein Schema angegeben wurde
+          if [[ ! "$URL" =~ ^https?:// ]]; then
+            URL="https://$URL"
+          fi
+
+          # Nur http/https zulassen
+          if [[ ! "$URL" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "::error::Ungültige URL: $URL"
+            exit 1
+          fi
+
+          # Hostname (ggf. mit Port) als Ordner-/Dateiname ermitteln,
+          # analog zum Verhalten von wget --mirror
+          HOST="$(printf '%s' "$URL" | sed -E 's~^https?://~~; s~/.*$~~')"
+          if [[ -z "$HOST" ]]; then
+            echo "::error::Konnte Hostname nicht aus URL ermitteln: $URL"
+            exit 1
+          fi
+
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "Lade herunter: $URL (Ordner: $HOST)"
+
+      - name: Webseite mit wget spiegeln
+        run: |
+          set -uo pipefail
+          mkdir -p download
+          cd download
+          # Gleiche Flags wie in der Website-Downloader App:
+          # -m (--mirror) -k (--convert-links) -E (--adjust-extension)
+          # -p (--page-requisites) -np (--no-parent)
+          wget -mkEpnp --no-if-modified-since \
+            -e robots=off \
+            --tries=3 \
+            "${{ steps.prep.outputs.url }}" || WGET_EXIT=$?
+
+          # wget liefert bei einzelnen fehlgeschlagenen Requests einen
+          # Exit-Code != 0. Solange der Zielordner Inhalte hat, gilt der
+          # Download als erfolgreich genug zum Archivieren.
+          if [[ ! -d "${{ steps.prep.outputs.host }}" ]] || [[ -z "$(ls -A "${{ steps.prep.outputs.host }}" 2>/dev/null)" ]]; then
+            echo "::error::Es wurden keine Dateien heruntergeladen (wget Exit-Code: ${WGET_EXIT:-0})."
+            exit 1
+          fi
+          echo "Download abgeschlossen. Inhalt:"
+          du -sh "${{ steps.prep.outputs.host }}"
+
+      - name: In ZIP packen
+        run: |
+          set -euo pipefail
+          cd download
+          zip -r -q "../${{ steps.prep.outputs.host }}.zip" "${{ steps.prep.outputs.host }}"
+          echo "ZIP erstellt:"
+          ls -lh "../${{ steps.prep.outputs.host }}.zip"
+
+      - name: ZIP als Artifact hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-${{ steps.prep.outputs.host }}
+          path: ${{ steps.prep.outputs.host }}.zip
+          if-no-files-found: error
+          retention-days: 30
